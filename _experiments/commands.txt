@@ -1,0 +1,19 @@
+Class:
+  Load
+  source env/bin/activate
+
+  Bash
+  srun --partition=class --account=class --qos=default --gres=gpu:rtxa4000:1 --mem=8gb --pty bash
+
+  Train
+  sbatch --partition=class --account=class --qos=high --gres=gpu:rtxa4000:1 --mem=16gb --time=20:00:00 train.sh
+
+Cluster:
+  Load
+  module load Python3/3.11.2
+
+  Bash
+  srun --qos=default --gres=gpu:rtxa6000:1 --mem=8gb --pty bash
+
+  Train
+  sbatch --qos=high --gres=gpu:rtxa6000:1 --mem=16gb --time=20:00:00 run.sh

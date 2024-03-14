@@ -812,6 +812,28 @@ class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
         )
         super().__init__(*args, **kwargs)
 
+class MixtralCodebook(nn.Module):
+    def __init__(self, config, decay=0.99, eps=1e-5):
+        super().__init__()
+        self.dim = config.hidden_size
+        self.n_embed = config.num_local_experts
+        self.decay = decay
+        self.eps = eps
+
+        self.embed = nn.Parameter(torch.randn(self.dim, self.n_embed))
+
+    def forward(self, hidden_states: torch.Tensor):
+        # get distance to each codebook embedding
+        # for each input vec, weighted average of ?
+        flatten = hidden_states.reshape(-1, self.dim) # B x N, rearrange so embedding dimension is last
+        dist = (
+            flatten.pow(2).sum(1, keepdim=True) # B x 1, square all entries, sum along embedding dimension
+            - 2 * flatten @ self.embed # B x K dot product between embedding dimension in flatten and embedding dimension in self.embed
+            + self.embed.pow(2).sum(0, keepdim=True) # 1 x K square all entries, sum along embedding dimension
+        )
+
+        return -dist
+        # dist is B x K, distance of every vector in the batch to each of K embeddings in codebook
 
 class MixtralSparseMoeBlock(nn.Module):
     """
@@ -834,6 +856,7 @@ class MixtralSparseMoeBlock(nn.Module):
 
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        #self.gate = MixtralCodebook(config)
 
         self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
