@@ -134,6 +134,7 @@ class MixtralConfig(PretrainedConfig):
         num_local_experts=8,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        cluster_experts=False
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -160,6 +161,7 @@ class MixtralConfig(PretrainedConfig):
         self.num_local_experts = num_local_experts
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.cluster_experts = cluster_experts
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

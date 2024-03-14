@@ -812,7 +812,7 @@ class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
         )
         super().__init__(*args, **kwargs)
 
-class MixtralCodebook(nn.Module):
+class MixtralClustering(nn.Module):
     def __init__(self, config, decay=0.99, eps=1e-5):
         super().__init__()
         self.dim = config.hidden_size
@@ -823,7 +823,7 @@ class MixtralCodebook(nn.Module):
         self.embed = nn.Parameter(torch.randn(self.dim, self.n_embed))
 
     def forward(self, hidden_states: torch.Tensor):
-        # get distance to each codebook embedding
+        # get distance to each cluster center
         # for each input vec, weighted average of ?
         flatten = hidden_states.reshape(-1, self.dim) # B x N, rearrange so embedding dimension is last
         dist = (
@@ -855,8 +855,7 @@ class MixtralSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         # gating
-        self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-        #self.gate = MixtralCodebook(config)
+        self.gate = MixtralClustering(config) if config.cluster_experts else nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
         self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 

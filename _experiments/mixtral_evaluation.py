@@ -3,7 +3,7 @@ import torch
 from datasets import load_dataset
 from tqdm import tqdm
 
-MODEL_PATH = '/fs/class-projects/spring2024/cmsc720/c720g000/results_attndrop_0.3/checkpoint-28000'
+MODEL_PATH = '/fs/nexus-scratch/vatsalb/mixtral/original_dropout0.4/checkpoint-10000'
 
 device = 'cuda'
 

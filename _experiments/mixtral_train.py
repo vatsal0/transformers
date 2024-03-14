@@ -13,13 +13,14 @@ run = wandb.init(
   anonymous='allow'
 )
 
-ATTENTION_DROPOUT = 0.5
+ATTENTION_DROPOUT = 0.4
+CLUSTER_EXPERTS=False
 LEARNING_RATE = 4e-5
 
 SAVE_STEPS=2000
 
-OUTPUT_PATH='/fs/class-projects/spring2024/cmsc720/c720g000/'
-OUTPUT_DIR='attndrop_0.5'
+OUTPUT_PATH='/fs/nexus-scratch/vatsalb/mixtral/'
+OUTPUT_DIR=('cluster' if CLUSTER_EXPERTS else 'original')+f'_dropout{ATTENTION_DROPOUT}'
 
 device='cuda'
 
@@ -45,7 +46,8 @@ config = MixtralConfig(
   num_experts_per_tok=2,
   num_local_experts=8 // 2,
   output_router_logits=True, #False,
-  router_aux_loss_coef=0.001
+  router_aux_loss_coef=0.001,
+  cluster_experts=CLUSTER_EXPERTS
 )
 model = MixtralForCausalLM(config).to(device)
 
@@ -70,11 +72,11 @@ training_arguments = TrainingArguments(
     optim='paged_adamw_32bit',
     save_steps=SAVE_STEPS,
     logging_steps=500,
-    save_total_limit=3,
+    save_total_limit=5,
     learning_rate=4e-5,
     weight_decay=0.001,
-    fp16 = False,
-    bf16 = False,
+    fp16=False,
+    bf16=False,
     max_grad_norm=0.3,
     # max_steps=2000,
     warmup_ratio=0.03,
@@ -93,7 +95,7 @@ trainer = SFTTrainer(
     dataset_text_field='text',
     tokenizer=tokenizer,
     args=training_arguments,
-    packing= False,
+    packing=False,
 )
 
 trainer.train()
