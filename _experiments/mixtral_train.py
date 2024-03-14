@@ -14,7 +14,7 @@ run = wandb.init(
 )
 
 ATTENTION_DROPOUT = 0.4
-CLUSTER_EXPERTS=False
+CLUSTER_EXPERTS = True
 LEARNING_RATE = 4e-5
 
 SAVE_STEPS=2000
@@ -51,7 +51,7 @@ config = MixtralConfig(
 )
 model = MixtralForCausalLM(config).to(device)
 
-print(f'{ATTENTION_DROPOUT=} {LEARNING_RATE=}')
+print(f'{ATTENTION_DROPOUT=} {LEARNING_RATE=} {CLUSTER_EXPERTS=}')
 print(f'{sum(p.numel() for p in model.parameters())} Parameters')
 
 tokenizer = AutoTokenizer.from_pretrained('mistralai/Mixtral-8x7B-v0.1')
