@@ -31,7 +31,8 @@ for begin_loc in tqdm(range(0, seq_len, stride)):
     outputs = model(input_ids, labels=target_ids)
     neg_log_likelihood = outputs.loss
   
-  nlls.append(neg_log_likelihood)
+  if not torch.isnan(neg_log_likelihood):
+    nlls.append(neg_log_likelihood)
   
   prev_end_loc = end_loc
   if end_loc == seq_len:
