@@ -3,8 +3,17 @@ import torch
 from datasets import load_dataset
 from tqdm import tqdm
 
-MODEL_PATH = '/fs/nexus-scratch/vatsalb/mixtral/original_dropout0.4/checkpoint-10000'
+MODEL_PATH = '/fs/nexus-scratch/vatsalb/mixtral/cluster_dropout0.4/checkpoint-35000'
+MODEL_PATH = '/fs/nexus-scratch/vatsalb/mixtral/cluster_final/checkpoint-35000' # cluster 63
+MODEL_PATH = '/fs/nexus-scratch/vatsalb/mixtral/cluster_detach_dropout0.4_router0.001_inv_proj16/checkpoint-27500'
 
+'''
+router0.01 138
+router0.005 146 
+router0.001 133
+'''
+# model.model.layers[0].block_sparse_moe.gate.weight[0].norm()
+# model.model.layers[0].block_sparse_moe.gate.embed.T[0].norm()
 device = 'cuda'
 
 model = MixtralForCausalLM.from_pretrained(MODEL_PATH).to(device)

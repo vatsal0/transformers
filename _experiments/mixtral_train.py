@@ -15,12 +15,17 @@ run = wandb.init(
 
 ATTENTION_DROPOUT = 0.4
 CLUSTER_EXPERTS = True
+GUMBEL_SOFTMAX = False
+DETACH_INPUT = CLUSTER_EXPERTS and True
 LEARNING_RATE = 4e-5
+ROUTER_COEF = 0.001
+DISTANCE_TYPE = 'negative' # negative=-dist, inverse_eps=1/eps+dist, inverse=1/1+dist
 
-SAVE_STEPS=2000
+SAVE_STEPS=2500
+EVAL_STEPS=2500
 
 OUTPUT_PATH='/fs/nexus-scratch/vatsalb/mixtral/'
-OUTPUT_DIR=('cluster' if CLUSTER_EXPERTS else 'original')+f'_dropout{ATTENTION_DROPOUT}'
+OUTPUT_DIR=('cluster' if CLUSTER_EXPERTS else 'original')+('_detach' if DETACH_INPUT else '')+f'_dropout{ATTENTION_DROPOUT}'+f'_router{ROUTER_COEF}_{DISTANCE_TYPE}_proj16'
 
 device='cuda'
 
@@ -46,12 +51,15 @@ config = MixtralConfig(
   num_experts_per_tok=2,
   num_local_experts=8 // 2,
   output_router_logits=True, #False,
-  router_aux_loss_coef=0.001,
-  cluster_experts=CLUSTER_EXPERTS
+  router_aux_loss_coef=ROUTER_COEF,
+  cluster_experts=CLUSTER_EXPERTS,
+  gumbel_softmax=GUMBEL_SOFTMAX,
+  detach_input=DETACH_INPUT,
+  distance_type=DISTANCE_TYPE
 )
 model = MixtralForCausalLM(config).to(device)
 
-print(f'{ATTENTION_DROPOUT=} {LEARNING_RATE=} {CLUSTER_EXPERTS=}')
+print(f'{ATTENTION_DROPOUT=} {LEARNING_RATE=} {CLUSTER_EXPERTS=} {GUMBEL_SOFTMAX=} {DETACH_INPUT=} {ROUTER_COEF=}')
 print(f'{sum(p.numel() for p in model.parameters())} Parameters')
 
 tokenizer = AutoTokenizer.from_pretrained('mistralai/Mixtral-8x7B-v0.1')
@@ -72,7 +80,7 @@ training_arguments = TrainingArguments(
     optim='paged_adamw_32bit',
     save_steps=SAVE_STEPS,
     logging_steps=500,
-    save_total_limit=5,
+    save_total_limit=3,
     learning_rate=4e-5,
     weight_decay=0.001,
     fp16=False,
@@ -83,7 +91,8 @@ training_arguments = TrainingArguments(
     group_by_length=True,
     lr_scheduler_type='linear',
     evaluation_strategy='steps',
-    eval_steps=SAVE_STEPS,
+    eval_steps=EVAL_STEPS,
+    load_best_model_at_end=True,
     report_to='wandb'
 )
 

@@ -1,6 +1,6 @@
 from transformers import AutoTokenizer, AutoConfig, MixtralForCausalLM
 
-MODEL_PATH = '/fs/class-projects/spring2024/cmsc720/c720g000/results_attndrop_0.3/checkpoint-28000'
+MODEL_PATH = '/fs/nexus-scratch/vatsalb/mixtral/cluster_dropout0.4/checkpoint-35000'
 
 device='cuda'
 

@@ -815,24 +815,35 @@ class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
 class MixtralClustering(nn.Module):
     def __init__(self, config, decay=0.99, eps=1e-5):
         super().__init__()
-        self.dim = config.hidden_size
-        self.n_embed = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.n_centers = config.num_local_experts
         self.decay = decay
         self.eps = eps
 
-        self.embed = nn.Parameter(torch.randn(self.dim, self.n_embed))
+        self.proj_dim=16
+
+        self.detach_input = config.detach_input
+        self.distance_type = config.distance_type
+        self.proj = nn.Linear(self.hidden_dim, self.proj_dim)
+        self.centers = nn.Parameter(torch.randn(self.proj_dim, self.n_centers))
 
     def forward(self, hidden_states: torch.Tensor):
         # get distance to each cluster center
-        # for each input vec, weighted average of ?
-        flatten = hidden_states.reshape(-1, self.dim) # B x N, rearrange so embedding dimension is last
+        if self.detach_input:
+            hidden_states = hidden_states.detach()
+        flatten = self.proj(hidden_states).reshape(-1, self.proj_dim) # B x N, rearrange so embedding dimension is last
         dist = (
             flatten.pow(2).sum(1, keepdim=True) # B x 1, square all entries, sum along embedding dimension
-            - 2 * flatten @ self.embed # B x K dot product between embedding dimension in flatten and embedding dimension in self.embed
-            + self.embed.pow(2).sum(0, keepdim=True) # 1 x K square all entries, sum along embedding dimension
+            - 2 * flatten @ self.centers # B x K dot product between embedding dimension in flatten and embedding dimension in self.embed
+            + self.centers.pow(2).sum(0, keepdim=True) # 1 x K square all entries, sum along embedding dimension
         )
 
-        return -dist
+        if distance_type == 'negative':
+          return -dist
+        elif distance_type == 'inverse_eps':
+          return 1/(eps+dist)
+        elif distance_type == 'inverse':
+          return 1/(1+dist)
         # dist is B x K, distance of every vector in the batch to each of K embeddings in codebook
 
 class MixtralSparseMoeBlock(nn.Module):
@@ -853,6 +864,7 @@ class MixtralSparseMoeBlock(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
+        self.gumbel_softmax = config.gumbel_softmax
 
         # gating
         self.gate = MixtralClustering(config) if config.cluster_experts else nn.Linear(self.hidden_dim, self.num_experts, bias=False)
@@ -866,7 +878,7 @@ class MixtralSparseMoeBlock(nn.Module):
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
 
-        routing_weights = F.gumbel_softmax(router_logits, dim=1) if config.gumbel_softmax else F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights = F.gumbel_softmax(router_logits, dim=1) if self.gumbel_softmax else F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype
