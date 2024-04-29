@@ -819,62 +819,6 @@ class MixtralClustering(nn.Module):
         self.n_centers = config.num_local_experts
         self.decay = decay
         self.eps = eps
-
-        self.cluster_dim = config.cluster_dim
-        self.detach_input = config.detach_input
-        self.distance_type = config.distance_type
-        self.beta = config.cluster_embedding_commitment
-
-        self.proj = nn.Linear(self.hidden_dim, self.cluster_dim)
-        self.centers = nn.Parameter(torch.randn(self.hidden_dim, self.n_centers) * config.cluster_std)
-        # self.centers = nn.Parameter(torch.rand(self.hidden_dim, self.n_centers)*2-1)
-
-    def forward(self, hidden_states: torch.Tensor):
-        # get distance to each cluster center
-        detached_hidden_states = hidden_states
-        if self.detach_input:
-            detached_hidden_states = detached_hidden_states.detach()
-
-        detached_centers = self.centers
-        if self.detach_input:
-            detached_centers = detached_centers.detach()
-        
-        centers_proj = self.proj(self.centers.T).T
-        hidden_states_proj = self.proj(hidden_states)
-
-        detached_centers_proj = self.proj(detached_centers.T).T
-        detached_hidden_states_proj = self.proj(detached_hidden_states)
-
-        dist_centers = (
-            detached_hidden_states_proj.pow(2).sum(1, keepdim=True)
-            - 2 * detached_hidden_states_proj @ centers_proj
-            + centers_proj.pow(2).sum(0, keepdim=True)
-        )
-
-        dist_hidden_states = (
-            hidden_states_proj.pow(2).sum(1, keepdim=True)
-            - 2 * hidden_states_proj @ detached_centers_proj
-            + detached_centers_proj.pow(2).sum(0, keepdim=True)
-        )
-
-        dist = (1 - self.beta) * dist_centers + self.beta * dist_hidden_states
-
-        if self.distance_type == 'negative':
-          return -dist
-        elif self.distance_type == 'inverse_eps':
-          return 1/(self.eps+dist)
-        elif self.distance_type == 'inverse':
-          return 1/(1+dist)
-        # dist is B x K, distance of every vector in the batch to each of K embeddings in codebook
-
-class MixtralClustering2(nn.Module):
-    def __init__(self, config, decay=0.99, eps=1e-5):
-        super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.n_centers = config.num_local_experts
-        self.decay = decay
-        self.eps = eps
-
         self.cluster_dim = config.cluster_dim
 
         self.proj = nn.Parameter(torch.randn(self.hidden_dim, self.cluster_dim) / self.hidden_dim**0.5)
@@ -891,51 +835,21 @@ class MixtralClustering2(nn.Module):
           hidden_states_proj.pow(2).sum(1, keepdim=True)
           - 2 * hidden_states_proj @ self.centers
           + self.centers.pow(2).sum(0, keepdim=True)
-      )#.pow(0.5) #/ self.cluster_dim
+      )
       logits = -dist
 
-      _, cluster_idx = logits.max(1)
-      cluster_onehot = F.one_hot(cluster_idx, self.n_centers).type(hidden_states.dtype) # bsz x n_centers
-
-      # tensor = torch.randn(1000, 4)
-      # _, indices = torch.topk(tensor, k=2, dim=1, largest=False)
-      # tensor.scatter(1, indices, float('-inf'))
-
-      # _, bottomk_idx = torch.topk(logits, k=2, dim=1, largest=False)
-      # topk_logits = logits.scatter(1, bottomk_idx, float('-inf'))
-
-      cluster_softmax = F.softmax(logits, dim=1) #F.softmax(topk_logits, dim=1) #
+      cluster_softmax = F.softmax(logits, dim=1)
 
       if self.training:
-        cluster_onehot_sum = cluster_onehot.sum(0) # n_centers
-        cluster_sum = hidden_states_proj.T @ cluster_onehot # cluster_dim x n_centers
-
         cluster_softmax_sum = cluster_softmax.sum(0)
         cluster_sum = hidden_states_proj.T @ cluster_softmax
 
-        '''
-        self.cluster_size.data.mul_(self.decay).add_(cluster_onehot_sum, alpha=1-self.decay)
-        self.centers_avg.data.mul_(self.decay).add_(cluster_sum, alpha=1-self.decay)
-        n = self.cluster_size.sum()
-        cluster_size = (self.cluster_size + self.eps) / (n + self.n_centers * self.eps) * n
-        center_normalized = self.centers_avg / cluster_size.unsqueeze(0)
-        self.centers.data.copy_(center_normalized)
-        '''
-
         cluster_avg = cluster_sum / cluster_softmax_sum.unsqueeze(0)
-        cluster_avg[:, cluster_softmax_sum < self.eps] = 0
-
-        # cluster_avg[:, cluster_onehot_sum < 0.05*cluster_onehot_sum.sum()] = hidden_states_proj.mean(dim=0).unsqueeze(1)
+        cluster_avg[:, cluster_softmax_sum < self.eps] = 0 # hidden_states_proj.mean(dim=0).unsqueeze(1)
 
         self.centers.data.mul_(self.decay).add_(cluster_avg, alpha=1-self.decay)
-        # somehow make it move towards recalculated cluster center. if cluster size is 0, decay it towards origin
-        # so multiply by 0.99 regardless, then move in the direction of avg of points in that cluster
-        # initialize new as 0, then new[cluster_size != 0] = mean of cluster
 
       return -dist
-
-# def dist(x,y):
-#   return x.pow(2).sum(1, keepdim=True) - 2 * x @ y.T + y.T.pow(2).sum(0, keepdim=True)
 
 class MixtralSparseMoeBlock(nn.Module):
     """
@@ -958,7 +872,7 @@ class MixtralSparseMoeBlock(nn.Module):
         self.gumbel_softmax = config.gumbel_softmax
 
         # gating
-        self.gate = MixtralClustering2(config) if config.cluster_experts else nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        self.gate = MixtralClustering(config) if config.cluster_experts else nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
         self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
@@ -969,7 +883,7 @@ class MixtralSparseMoeBlock(nn.Module):
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
 
-        routing_weights = F.gumbel_softmax(router_logits, dim=1) if self.gumbel_softmax else F.softmax(router_logits, dim=1, dtype=torch.float)
+        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
         # we cast back to the input dtype

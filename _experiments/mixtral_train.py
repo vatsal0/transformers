@@ -15,38 +15,15 @@ run = wandb.init(
 
 ATTENTION_DROPOUT = 0.4
 CLUSTER_EXPERTS = True
-GUMBEL_SOFTMAX = False # not used
-DETACH_INPUT = CLUSTER_EXPERTS and True # not used
 LEARNING_RATE = 4e-5
 ROUTER_COEF = 0.001
-DISTANCE_TYPE = 'inverse_eps' # not used
 CLUSTER_DIM = 8 
 CLUSTER_STD = 1
-BETA = 0.1 # not used
 
 SAVE_STEPS=2500
 EVAL_STEPS=2500
 
 '''
-observations:
-first couple thousand steps good clusters are being learned.
-variance seems to grow with time though. the projected embedding space becomes more and more spread out
-suggested solution: a layer norm
-that doesnt work, because it normalizes each embedding. then each dimension is std normal, and distance is always constant sqrt(dim) making a sphere
-then:
-normalized linear transformation
-doesnt work, didnt learn
-then: init proj matrix by dividing sqrt(hidden_dim)
-doesnt work, logits are too close
-
-143 soft/18: original < slight expert collapse, seems to learn way slower
-129 soft2/19: use softmax for counts too < best one
-132 soft3/20: divide logits by cluster dim < reverse expert collapse, because logits are too close all the clusters converge to origin
-132 soft4/21: no division but square root the distance squared. compare with soft2 < also 1/4 all experts
-    soft5/25: square root dist, and topk the logits for counts
-    soft6/26: just topk logits
-    ^ also fucked. need all logits for proper clustering
-
 8 dim  154
 16 dim 123
 32 dim 129

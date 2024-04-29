@@ -135,12 +135,8 @@ class MixtralConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         cluster_experts=False,
-        gumbel_softmax=False,
-        detach_input=False,
-        distance_type='negative',
-        cluster_dim=8,
-        cluster_std=0.1,
-        cluster_embedding_commitment=0,
+        cluster_dim=16,
+        cluster_std=1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -168,12 +164,8 @@ class MixtralConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.cluster_experts = cluster_experts
-        self.gumbel_softmax = gumbel_softmax
-        self.detach_input = detach_input
-        self.distance_type = distance_type
         self.cluster_dim = cluster_dim
         self.cluster_std = cluster_std
-        self.cluster_embedding_commitment = cluster_embedding_commitment
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
