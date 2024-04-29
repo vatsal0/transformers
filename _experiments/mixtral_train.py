@@ -15,17 +15,47 @@ run = wandb.init(
 
 ATTENTION_DROPOUT = 0.4
 CLUSTER_EXPERTS = True
-GUMBEL_SOFTMAX = False
-DETACH_INPUT = CLUSTER_EXPERTS and True
+GUMBEL_SOFTMAX = False # not used
+DETACH_INPUT = CLUSTER_EXPERTS and True # not used
 LEARNING_RATE = 4e-5
 ROUTER_COEF = 0.001
-DISTANCE_TYPE = 'negative' # negative=-dist, inverse_eps=1/eps+dist, inverse=1/1+dist
+DISTANCE_TYPE = 'inverse_eps' # not used
+CLUSTER_DIM = 8 
+CLUSTER_STD = 1
+BETA = 0.1 # not used
 
 SAVE_STEPS=2500
 EVAL_STEPS=2500
 
+'''
+observations:
+first couple thousand steps good clusters are being learned.
+variance seems to grow with time though. the projected embedding space becomes more and more spread out
+suggested solution: a layer norm
+that doesnt work, because it normalizes each embedding. then each dimension is std normal, and distance is always constant sqrt(dim) making a sphere
+then:
+normalized linear transformation
+doesnt work, didnt learn
+then: init proj matrix by dividing sqrt(hidden_dim)
+doesnt work, logits are too close
+
+143 soft/18: original < slight expert collapse, seems to learn way slower
+129 soft2/19: use softmax for counts too < best one
+132 soft3/20: divide logits by cluster dim < reverse expert collapse, because logits are too close all the clusters converge to origin
+132 soft4/21: no division but square root the distance squared. compare with soft2 < also 1/4 all experts
+    soft5/25: square root dist, and topk the logits for counts
+    soft6/26: just topk logits
+    ^ also fucked. need all logits for proper clustering
+
+8 dim  154
+16 dim 123
+32 dim 129
+64dim  139
+'''
+
 OUTPUT_PATH='/fs/nexus-scratch/vatsalb/mixtral/'
-OUTPUT_DIR=('cluster' if CLUSTER_EXPERTS else 'original')+('_detach' if DETACH_INPUT else '')+f'_dropout{ATTENTION_DROPOUT}'+f'_router{ROUTER_COEF}_{DISTANCE_TYPE}_proj16'
+# OUTPUT_DIR=('cluster' if CLUSTER_EXPERTS else 'original')+('_detach' if DETACH_INPUT else '')+f'_dropout{ATTENTION_DROPOUT}'+f'_router{ROUTER_COEF}_{DISTANCE_TYPE}_proj{CLUSTER_DIM}_beta{BETA}_new_soft'
+OUTPUT_DIR=f'new_proj{CLUSTER_DIM}_soft2'
 
 device='cuda'
 
@@ -55,7 +85,10 @@ config = MixtralConfig(
   cluster_experts=CLUSTER_EXPERTS,
   gumbel_softmax=GUMBEL_SOFTMAX,
   detach_input=DETACH_INPUT,
-  distance_type=DISTANCE_TYPE
+  distance_type=DISTANCE_TYPE,
+  cluster_dim=CLUSTER_DIM,
+  cluster_std=CLUSTER_STD,
+  cluster_embedding_commitment=BETA,
 )
 model = MixtralForCausalLM(config).to(device)
 
@@ -67,8 +100,8 @@ tokenizer.padding_side = 'right'
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.add_eos_token = True
 
-train_dataset = load_dataset(path='wikitext', name='wikitext-2-raw-v1', split='train').shuffle()
-eval_dataset = load_dataset(path='wikitext', name='wikitext-2-raw-v1', split='validation')
+train_dataset = load_dataset(path='wikitext', name='wikitext-2-raw-v1', split='train', cache_dir='/fs/nexus-scratch/vatsalb/huggingface').shuffle()
+eval_dataset = load_dataset(path='wikitext', name='wikitext-2-raw-v1', split='validation', cache_dir='/fs/nexus-scratch/vatsalb/huggingface')
 
 training_arguments = TrainingArguments(
     output_dir=OUTPUT_PATH + OUTPUT_DIR,
@@ -80,7 +113,7 @@ training_arguments = TrainingArguments(
     optim='paged_adamw_32bit',
     save_steps=SAVE_STEPS,
     logging_steps=500,
-    save_total_limit=3,
+    save_total_limit=2,
     learning_rate=4e-5,
     weight_decay=0.001,
     fp16=False,

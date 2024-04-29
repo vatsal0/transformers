@@ -138,6 +138,9 @@ class MixtralConfig(PretrainedConfig):
         gumbel_softmax=False,
         detach_input=False,
         distance_type='negative',
+        cluster_dim=8,
+        cluster_std=0.1,
+        cluster_embedding_commitment=0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -168,6 +171,9 @@ class MixtralConfig(PretrainedConfig):
         self.gumbel_softmax = gumbel_softmax
         self.detach_input = detach_input
         self.distance_type = distance_type
+        self.cluster_dim = cluster_dim
+        self.cluster_std = cluster_std
+        self.cluster_embedding_commitment = cluster_embedding_commitment
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
